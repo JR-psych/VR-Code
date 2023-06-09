@@ -1,0 +1,695 @@
+---
+title: "All_analysis_cpm"
+author: "JR"
+date: "23.06.2023"
+output: html_document
+---
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+  library(stats)
+  library(Rmisc) 
+  library(readxl)
+  library(ggpubr) 
+  library(rstatix) 
+  library(WRS2)
+  library(dplyr) 
+  library(effectsize)
+  library(compareGroups)
+  library(Hmisc)
+```
+
+load data
+```{r}
+long_d <- readRDS("long_d_0.rds")
+```
+
+
+Prepare data for cpm_pdt analysis
+Excluding participants due to technical errors
+```{r}
+aov_cpm_dif_pdt <- long_d %>% dplyr::filter(id != "VR_001") %>%
+                            dplyr::filter(id != "VR_010") %>%
+                            dplyr::filter(id != "VR_029") %>%
+                            dplyr::filter(id != "VR_048") %>%
+                            dplyr::mutate(cpm_dif_pdt = t05_pdt0 - t01_pdt0) %>%
+                            dplyr::select(id,gruppe,condition,cpm_dif_pdt)  %>% droplevels()
+```
+
+Get descriptive statistics grouped by group and condition
+```{r}
+mean_cpm_dif_pdt_gruppe<- aov_cpm_dif_pdt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_pdt = mean(cpm_dif_pdt),
+            median_cpm_dif_pdt = median(cpm_dif_pdt),
+            sd_cpm_dif_pdt = sd(cpm_dif_pdt),
+            iqr_cpm_dif_pdt = IQR(cpm_dif_pdt),
+            min_cpm_dif_pdt = min(cpm_dif_pdt),
+            max_cpm_dif_pdt = max(cpm_dif_pdt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(cpm_dif_pdt ~ gruppe, data = aov_cpm_dif_pdt, ci = .95))
+
+
+mean_cpm_dif_pdt_condition <-  aov_cpm_dif_pdt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_pdt = mean(cpm_dif_pdt),
+            median_cpm_dif_pdt = median(cpm_dif_pdt),
+            sd_cpm_dif_pdt = sd(cpm_dif_pdt),
+            iqr_cpm_dif_pdt = IQR(cpm_dif_pdt),
+            min_cpm_dif_pdt = min(cpm_dif_pdt),
+            max_cpm_dif_pdt = max(cpm_dif_pdt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(cpm_dif_pdt ~ condition, data = aov_cpm_dif_pdt, ci = .95))
+
+
+ci_gc =  Rmisc::group.CI(cpm_dif_pdt ~ condition * gruppe, data = aov_cpm_dif_pdt, ci = .95)
+
+mean_cpm_dif_pdt_condition_gruppe <- aov_cpm_dif_pdt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_pdt = mean(cpm_dif_pdt),
+            median_cpm_dif_pdt = median(cpm_dif_pdt),
+            sd_cpm_dif_pdt = sd(cpm_dif_pdt),
+            iqr_cpm_dif_pdt = IQR(cpm_dif_pdt),
+            min_cpm_dif_pdt = min(cpm_dif_pdt),
+            max_cpm_dif_pdt = max(cpm_dif_pdt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+```
+
+
+Testing assumptions
+```{r}
+bp_cpm_dif_pdt <- ggpubr::ggboxplot(aov_cpm_dif_pdt, x = "gruppe", y = "cpm_dif_pdt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_cpm_dif_pdt
+
+outliers_cpm_dif_pdt <- aov_cpm_dif_pdt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(cpm_dif_pdt)
+outliers_cpm_dif_pdt
+
+shapiro_cpm_dif_pdt <- aov_cpm_dif_pdt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::shapiro_test(cpm_dif_pdt)
+
+shapiro_cpm_dif_pdt
+
+levene_cpm_dif_pdt <- aov_cpm_dif_pdt %>%
+  dplyr::group_by(condition) %>%
+  rstatix::levene_test(cpm_dif_pdt ~ gruppe)
+levene_cpm_dif_pdt
+
+box_cpm_dif_pdt<- rstatix::box_m(aov_cpm_dif_pdt[,"cpm_dif_pdt", drop = FALSE], aov_cpm_dif_pdt$gruppe)
+box_cpm_dif_pdt
+
+# extreme outliers: 27,57
+```
+
+
+
+Calculating mixed anova and robust mixed anova
+```{r}
+anova_cpm_dif_pdt <- rstatix::anova_test(data=aov_cpm_dif_pdt, dv= cpm_dif_pdt, wid = id, between =gruppe,
+                       within= condition)
+
+rstatix::get_anova_table(anova_cpm_dif_pdt, correction = "auto")
+
+WRS2::bwtrim(cpm_dif_pdt ~ gruppe * condition, id = id, data = aov_cpm_dif_pdt)
+```
+
+Sensitivity analysis
+Excluding outliers
+```{r}
+aov_cpm_pdt_od <- aov_cpm_dif_pdt %>% filter(id != "VR_057")  %>% filter(id != "VR_027")
+```
+
+Calculating mixed anova and robust mixed anova without outliers
+```{r}
+anova_cpm_dif_pdtOD <- anova_test(data=aov_cpm_pdt_od, dv= cpm_dif_pdt, wid = id, between =gruppe,
+                       within= condition)
+
+get_anova_table(anova_cpm_dif_pdtOD)
+
+WRS2::bwtrim(cpm_dif_pdt ~ gruppe * condition, id = id, data = aov_cpm_pdt_od)
+
+```
+
+Post-Hoc-Tests
+t-tests
+```{r}
+aov_cpm_dif_pdt %>% dplyr::group_by(gruppe) %>%
+       rstatix::pairwise_t_test(cpm_dif_pdt ~ condition, paired = TRUE, p.adjust.method = "none", pool.sd = FALSE)
+```
+
+```{r}
+aov_cpm_dif_pdt %>% dplyr::group_by(condition) %>%
+       rstatix::pairwise_t_test(cpm_dif_pdt ~ gruppe, paired = FALSE, p.adjust.method = "none", pool.sd = FALSE)
+```
+
+
+Wilcox-tests
+```{r}
+aov_cpm_dif_pdt %>% dplyr::group_by(gruppe) %>%
+       rstatix::pairwise_wilcox_test(cpm_dif_pdt ~ condition, paired = TRUE, p.adjust.method = "none", pool.sd = FALSE)
+# no differences
+```
+
+```{r}
+aov_cpm_dif_pdt %>% dplyr::group_by(condition) %>%
+       rstatix::pairwise_wilcox_test(cpm_dif_pdt ~ gruppe, paired = FALSE, p.adjust.method = "none", pool.sd = FALSE)
+```
+
+
+Post-Hoc-Tests sensitivity analysis
+t-test
+```{r}
+aov_cpm_pdt_od %>% dplyr::group_by(gruppe) %>%
+       rstatix::pairwise_t_test(cpm_dif_pdt ~ condition, paired = TRUE, p.adjust.method = "none", pool.sd = FALSE)
+#no differences
+```
+
+```{r}
+aov_cpm_pdt_od %>% dplyr::group_by(condition) %>%
+       rstatix::pairwise_t_test(cpm_dif_pdt ~ gruppe, paired = FALSE, p.adjust.method = "none", pool.sd = FALSE)
+#no differences
+```
+
+
+########################## CPM PDT Exploratory Analysis #######################################################
+
+Create df with cpm_count = whether the effect was positive or negativ
+```{r}
+pdt_count <- aov_cpm_dif_pdt %>% dplyr::mutate(cpm_pdt_count = ifelse(cpm_dif_pdt == 0,"No effect",ifelse(cpm_dif_pdt < 0,"Negativ",ifelse(cpm_dif_pdt >0, "Positiv","Didnt work" ))))
+
+```
+
+Create table
+```{r}
+cpm_pdt_compareT <- compareGroups::createTable(compareGroups::compareGroups(cpm_pdt_count ~ gruppe + condition, data = pdt_count, var.equal = FALSE), show.all = TRUE, show.p.overall = TRUE)
+cpm_pdt_compareT
+```
+
+Stratify table
+```{r}
+cpm_pdt_tabestr_gruppe <- compareGroups::strataTable(cpm_pdt_compareT, strata="gruppe")
+cpm_pdt_tabestr_gruppe
+```
+
+Stratify table
+```{r}
+cpm_pdt_tabestr_condition <- compareGroups::strataTable(cpm_pdt_compareT , strata="condition")
+cpm_pdt_tabestr_condition
+
+```
+
+
+
+Prepare data for fishers test (HC)
+```{r}
+hc <- pdt_count %>% dplyr::filter(gruppe == "HC") %>% dplyr::select(id,condition,cpm_pdt_count)
+```
+
+
+```{r}
+hbaseline <- hc %>% dplyr::filter(condition == "Baseline") %>% Hmisc::describe(hc$cpm_pdt_count, na.rm = FALSE)
+names_baseline <- hbaseline$cpm_pdt_count$value$value
+
+hcbaseline <- data.frame(hbaseline$cpm_pdt_count$value$frequency, row.names = names_baseline)
+colnames(hcbaseline) <- "Baseline" 
+hcbaseline <- hcbaseline %>% dplyr::mutate(id = names_baseline)
+```
+
+```{r}
+h_imagine <- hc %>% dplyr::filter(condition == "Imagine") %>% Hmisc::describe(hc$cpm_pdt_count)
+names_imagine <- h_imagine$cpm_pdt_count$value$value
+
+hcimagine <- data.frame(h_imagine$cpm_pdt_count$value$frequency, row.names = names_imagine)
+colnames(hcimagine) <- "Imagery" 
+hcimagine <- hcimagine %>% dplyr::mutate(id = names_imagine)
+```
+
+```{r}
+h_view <- hc %>% dplyr::filter(condition == "View") %>% Hmisc::describe(hc$cpm_pdt_count)
+names_view <- h_view$cpm_pdt_count$value$value
+
+hcview <- data.frame(h_view$cpm_pdt_count$value$frequency, row.names = names_view)
+colnames(hcview) <- "View" 
+hcview <- hcview %>% dplyr::mutate(id = names_view)
+```
+
+
+```{r}
+h_vr <- hc %>% dplyr::filter(condition == "VR") %>% Hmisc::describe(hc$cpm_pdt_count)
+names_vr <- h_vr$cpm_pdt_count$value$value
+
+hcvr <- data.frame(h_vr$cpm_pdt_count$value$frequency, row.names = names_vr)
+colnames(hcvr) <- "VR" 
+hcvr <- hcvr %>% dplyr::mutate(id = names_vr)
+```
+
+
+```{r}
+hc_bi <- dplyr::full_join(hcbaseline,hcimagine, by = "id") 
+hc_biv <- dplyr::full_join(hc_bi,hcview, by = "id")
+hc_t <- dplyr::full_join(hc_biv,hcvr, by = "id")
+hc_t <- hc_t %>% replace(is.na(.), 0) %>% dplyr::select(Baseline,Imagery,View,VR)
+rownames(hc_t) <- hc_biv$id
+```
+
+Prepare data for fishers test (CP)
+```{r}
+cp <- pdt_count %>% dplyr::filter(gruppe == "CP") %>% dplyr::select(id,condition,cpm_pdt_count)
+```
+
+```{r}
+c_baseline <- cp %>% dplyr::filter(condition == "Baseline") %>% Hmisc::describe(cp$cpm_pdt_count)
+cnames_baseline <- c_baseline$cpm_pdt_count$value$value
+
+cpbaseline <- data.frame(c_baseline$cpm_pdt_count$value$frequency, row.names = cnames_baseline)
+colnames(cpbaseline) <- "Baseline" 
+cpbaseline <- cpbaseline %>% dplyr::mutate(id = cnames_baseline)
+```
+
+```{r}
+c_imagine <- cp %>% dplyr::filter(condition == "Imagine") %>% Hmisc::describe(cp$cpm_pdt_count)
+cnames_imagine <- c_imagine$cpm_pdt_count$value$value
+
+cpimagine <- data.frame(c_imagine$cpm_pdt_count$value$frequency, row.names = cnames_imagine)
+colnames(cpimagine) <- "Imagery" 
+cpimagine <- cpimagine %>% dplyr::mutate(id = cnames_imagine)
+```
+
+
+```{r}
+c_view <- cp %>% dplyr::filter(condition == "View") %>% Hmisc::describe(cp$cpm_pdt_count)
+cnames_view <- c_view$cpm_pdt_count$value$value
+
+cpview <- data.frame(c_view$cpm_pdt_count$value$frequency, row.names = cnames_view)
+colnames(cpview) <- "View" 
+cpview <- cpview %>% dplyr::mutate(id = cnames_view)
+```
+
+
+```{r}
+c_vr <- cp %>% dplyr::filter(condition == "VR") %>% Hmisc::describe(cp$cpm_pdt_count)
+cnames_vr <- c_vr$cpm_pdt_count$value$value
+
+cpvr <- data.frame(c_vr$cpm_pdt_count$value$frequency, row.names = cnames_vr)
+colnames(cpvr) <- "VR" 
+cpvr <- cpvr %>% dplyr::mutate(id = cnames_vr)
+```
+
+
+```{r}
+cp_bi <- dplyr::full_join(cpbaseline,cpimagine, by = "id") 
+cp_biv <- dplyr::full_join(cp_bi,cpview, by = "id")
+cp_t <- dplyr::full_join(cp_biv,cpvr, by = "id")
+cp_t <- cp_t %>% replace(is.na(.), 0) %>% dplyr::select(Baseline,Imagery,View,VR)
+rownames(cp_t) <- cp_biv$id
+```
+
+
+```{r}
+cp_t
+hc_t
+```
+
+Fisher´s tests
+```{r}
+stats::fisher.test(cp_t)
+# No differences for CP
+```
+
+```{r}
+stats::fisher.test(hc_t)
+# Differences for HC
+```
+
+```{r}
+hc_t %>% dplyr::select(-Baseline) %>% stats::fisher.test()
+# No differences for HC when Baseline is removed
+```
+
+```{r}
+hc_t %>% dplyr::select(Baseline,VR) %>% stats::fisher.test()
+# Sig. differences between Baseline and vR
+```
+
+```{r}
+hc_t %>% dplyr::select(Baseline,View) %>% stats::fisher.test()
+# Sig. differences between Baseline and view
+```
+```{r}
+hc_t %>% dplyr::select(Baseline,Imagery) %>% stats::fisher.test()
+# No sig. differences between Baseline and Imagery
+```
+##################################  CPM PTT ###########################################################################
+
+Prepare data
+Excluding participants due to technical errors
+```{r}
+aov_cpm_dif_ptt <- long_d %>% droplevels() %>%
+                    dplyr::select(id,condition,gruppe,t01_ptt,t05_ptt) %>% 
+                             dplyr::filter(id != "VR_001") %>%
+                             dplyr::filter(id != "VR_010") %>%  
+                             dplyr::filter(id != "VR_029") %>% 
+                             dplyr::filter(id != "VR_048") %>% 
+                             dplyr::mutate(cpm_dif_ptt = t05_ptt - t01_ptt)
+```
+
+
+Get descriptive statistics grouped by group and condition
+```{r}
+
+mean_cpm_dif_ptt_gruppe<- aov_cpm_dif_ptt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_ptt = mean(cpm_dif_ptt),
+            median_cpm_dif_ptt = median(cpm_dif_ptt),
+            sd_cpm_dif_ptt = sd(cpm_dif_ptt),
+            iqr_cpm_dif_ptt = IQR(cpm_dif_ptt),
+            min_cpm_dif_ptt = min(cpm_dif_ptt),
+            max_cpm_dif_ptt = max(cpm_dif_ptt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(cpm_dif_ptt ~ gruppe, data = aov_cpm_dif_ptt, ci = .95))
+
+
+mean_cpm_dif_ptt_condition <-  aov_cpm_dif_ptt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_ptt = mean(cpm_dif_ptt),
+            median_cpm_dif_ptt = median(cpm_dif_ptt),
+            sd_cpm_dif_ptt = sd(cpm_dif_ptt),
+            iqr_cpm_dif_ptt = IQR(cpm_dif_ptt),
+            min_cpm_dif_ptt = min(cpm_dif_ptt),
+            max_cpm_dif_ptt = max(cpm_dif_ptt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(cpm_dif_ptt ~ condition, data = aov_cpm_dif_ptt, ci = .95))
+
+
+ci_gc =  Rmisc::group.CI(cpm_dif_ptt ~ condition * gruppe, data = aov_cpm_dif_ptt, ci = .95)
+
+mean_cpm_dif_ptt_condition_gruppe <- aov_cpm_dif_ptt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_ptt = mean(cpm_dif_ptt),
+            median_cpm_dif_ptt = median(cpm_dif_ptt),
+            sd_cpm_dif_ptt = sd(cpm_dif_ptt),
+            iqr_cpm_dif_ptt = IQR(cpm_dif_ptt),
+            min_cpm_dif_ptt = min(cpm_dif_ptt),
+            max_cpm_dif_ptt = max(cpm_dif_ptt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+```
+
+Test assumptions
+```{r}
+bp_cpm_dif_ptt <- ggpubr::ggboxplot(aov_cpm_dif_ptt, x = "gruppe", y = "cpm_dif_ptt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_cpm_dif_ptt
+
+
+outliers_cpm_dif_ptt <- aov_cpm_dif_ptt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(cpm_dif_ptt)
+outliers_cpm_dif_ptt
+
+shapiro_cpm_dif_ptt <- aov_cpm_dif_ptt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::shapiro_test(cpm_dif_ptt)
+shapiro_cpm_dif_ptt
+
+levene_cpm_dif_ptt <- aov_cpm_dif_ptt %>%
+  dplyr::group_by(condition) %>%
+  rstatix::levene_test(cpm_dif_ptt ~ gruppe)
+levene_cpm_dif_ptt
+
+box_cpm_dif_ptt<- rstatix::box_m(aov_cpm_dif_ptt[,"cpm_dif_ptt", drop = FALSE], aov_cpm_dif_ptt$gruppe)
+box_cpm_dif_ptt
+
+# One extreme outlier (ID45) 
+# HC-Imagine not normal distributed
+# No homogeneity of variances for Imagine and View
+# No homogeneity of Covariances 
+```
+
+Calculating mixed anova and robust mixed anova without outliers
+```{r}
+anova_cpm_dif_ptt <- rstatix::anova_test(data=aov_cpm_dif_ptt, dv= cpm_dif_ptt, wid = id, between =gruppe,
+                       within= condition)
+rstatix::get_anova_table(anova_cpm_dif_ptt, correction = "auto")
+
+WRS2::bwtrim(cpm_dif_ptt ~ gruppe * condition, id = id, data = aov_cpm_dif_ptt)
+```
+Get ES and CI for PES
+```{r}
+cpm_ptt_es <- stats::aov(cpm_dif_ptt ~ condition * gruppe + Error(id/condition), data = aov_cpm_dif_ptt)
+effectsize::eta_squared(cpm_ptt_es,alternative = "two.sided", partial = TRUE)
+```
+
+
+Sensitivity Analysis
+```{r}
+aov_cpm_dif_pttod <- aov_cpm_dif_ptt %>% dplyr::filter(id != "VR_045") 
+anova_cpm_dif_pttod <- rstatix::anova_test(data=aov_cpm_dif_pttod, dv= cpm_dif_ptt, wid = id, between =gruppe,
+                       within= condition)
+
+rstatix::get_anova_table(anova_cpm_dif_pttod, correction = "auto")
+# No differences
+```
+
+Post-Hoc-Tests
+Paired t-test
+```{r}
+aov_cpm_dif_ptt %>%
+        pairwise_t_test(
+         cpm_dif_ptt ~ condition, paired = TRUE, pool.sd = FALSE,
+         p.adjust.method = "none") 
+```
+
+Wilcox test
+```{r}
+aov_cpm_dif_ptt %>%
+        pairwise_wilcox_test(
+         cpm_dif_ptt ~ condition, paired = TRUE, pool.sd = FALSE,
+         p.adjust.method = "none") 
+#No differences
+```
+Sensitivity analysis
+```{r}
+aov_cpm_dif_pttod %>%
+        pairwise_t_test(
+         cpm_dif_ptt ~ condition, paired = TRUE, pool.sd = FALSE,
+         p.adjust.method = "none") 
+
+# No differences
+```
+
+
+########################## CPM PTT Exploratory Analysis #######################################################
+
+Create df with cpm_count = whether the effect was positive or negativ
+```{r}
+ptt_count <- aov_cpm_dif_ptt %>% dplyr::mutate(cpm_ptt_count = ifelse(cpm_dif_ptt == 0,"Kein Effekt",ifelse(cpm_dif_ptt < 0,"Negativ",ifelse(cpm_dif_ptt >0, "Positiv","Hat nicht geklappt" ))))
+
+```
+
+Create table
+```{r}
+cpm_ptt_tab <- compareGroups::createTable(compareGroups::compareGroups(cpm_ptt_count ~ gruppe + condition, data = ptt_count, var.equal = FALSE), show.all = TRUE, show.p.overall = TRUE)
+cpm_ptt_tab
+```
+
+Stratify table
+```{r}
+cpm_ptt_tabestr_gruppe <- compareGroups::strataTable(cpm_ptt_tab, strata="gruppe")
+cpm_ptt_tabestr_gruppe
+```
+
+Stratify table
+```{r}
+cpm_ptt_tabestr_condition <- compareGroups::strataTable(cpm_ptt_tab, strata="condition")
+cpm_ptt_tabestr_condition
+
+```
+
+Prepare data for fishers test (HC)
+```{r}
+cpm_ptt_hc <- ptt_count %>% dplyr::filter(gruppe == "HC") %>% dplyr::select(id,condition,cpm_ptt_count)
+```
+
+
+```{r}
+cpm_ptt_hbaseline <- cpm_ptt_hc %>% dplyr::filter(condition == "Baseline") %>% Hmisc::describe(cpm_ptt_hc$cpm_ptt_count)
+cpm_ptt_names_baseline <- cpm_ptt_hbaseline$cpm_ptt_count$value$value
+
+cpm_ptt_hcbaseline <- data.frame(cpm_ptt_hbaseline$cpm_ptt_count$value$frequency, row.names = cpm_ptt_names_baseline)
+colnames(cpm_ptt_hcbaseline) <- "Baseline" 
+cpm_ptt_hcbaseline <- cpm_ptt_hcbaseline %>% dplyr::mutate(id = cpm_ptt_names_baseline)
+```
+
+```{r}
+cpm_ptt_h_imagine <- cpm_ptt_hc %>% dplyr::filter(condition == "Imagine") %>% Hmisc::describe(cpm_ptt_hc$cpm_ptt_count)
+cpm_ptt_names_imagine <- cpm_ptt_h_imagine$cpm_ptt_count$value$value
+
+cpm_ptt_hcimagine <- data.frame(cpm_ptt_h_imagine$cpm_ptt_count$value$frequency, row.names = cpm_ptt_names_imagine)
+colnames(cpm_ptt_hcimagine) <- "Imagery" 
+cpm_ptt_hcimagine <- cpm_ptt_hcimagine %>% dplyr::mutate(id = cpm_ptt_names_imagine)
+```
+
+
+```{r}
+cpm_ptt_h_view <- cpm_ptt_hc %>% dplyr::filter(condition == "View") %>% Hmisc::describe(cpm_ptt_hc$cpm_ptt_count)
+cpm_ptt_names_view <- cpm_ptt_h_view$cpm_ptt_count$value$value
+
+cpm_ptt_hcview <- data.frame(cpm_ptt_h_view$cpm_ptt_count$value$frequency, row.names = cpm_ptt_names_view)
+colnames(cpm_ptt_hcview) <- "View" 
+cpm_ptt_hcview <- cpm_ptt_hcview %>% dplyr::mutate(id = cpm_ptt_names_view)
+```
+
+
+
+```{r}
+cpm_ptt_h_vr <- cpm_ptt_hc %>% dplyr::filter(condition == "VR") %>% Hmisc::describe(cpm_ptt_hc$cpm_ptt_count)
+cpm_ptt_names_vr <- cpm_ptt_h_vr$cpm_ptt_count$value$value
+
+cpm_ptt_hcvr <- data.frame(cpm_ptt_h_vr$cpm_ptt_count$value$frequency, row.names = cpm_ptt_names_vr)
+colnames(cpm_ptt_hcvr) <- "VR" 
+cpm_ptt_hcvr <- cpm_ptt_hcvr %>% dplyr::mutate(id = cpm_ptt_names_vr)
+```
+
+
+```{r}
+cpm_ptt_hc_bi <- dplyr::full_join(cpm_ptt_hcbaseline,cpm_ptt_hcimagine, by = "id") 
+cpm_ptt_hc_biv <- dplyr::full_join(cpm_ptt_hc_bi,cpm_ptt_hcview, by = "id")
+cpm_ptt_hc_t <- dplyr::full_join(cpm_ptt_hc_biv,cpm_ptt_hcvr, by = "id")
+cpm_ptt_hc_t <- cpm_ptt_hc_t %>% replace(is.na(.), 0) %>% dplyr::select(Baseline,Imagery,View,VR)
+rownames(cpm_ptt_hc_t) <- cpm_ptt_hc_biv$id
+```
+
+
+Prepare data for fishers test (CP)
+```{r}
+cpm_ptt_cp <- ptt_count %>% dplyr::filter(gruppe == "CP") %>% dplyr::select(id,condition,cpm_ptt_count)
+```
+
+```{r}
+cpm_ptt_c_baseline <- cpm_ptt_cp %>% dplyr::filter(condition == "Baseline") %>% Hmisc::describe(cpm_ptt_cp$cpm_ptt_count)
+cpm_ptt_cnames_baseline <- cpm_ptt_c_baseline$cpm_ptt_count$value$value
+
+cpm_ptt_cpbaseline <- data.frame(cpm_ptt_c_baseline$cpm_ptt_count$value$frequency, row.names = cpm_ptt_cnames_baseline)
+colnames(cpm_ptt_cpbaseline) <- "Baseline" 
+cpm_ptt_cpbaseline <- cpm_ptt_cpbaseline %>% dplyr::mutate(id = cpm_ptt_cnames_baseline)
+```
+
+```{r}
+cpm_ptt_c_imagine <- cpm_ptt_cp %>% dplyr::filter(condition == "Imagine") %>% Hmisc::describe(cpm_ptt_cp$cpm_ptt_count)
+cpm_ptt_cnames_imagine <- cpm_ptt_c_imagine$cpm_ptt_count$value$value
+
+cpm_ptt_cpimagine <- data.frame(cpm_ptt_c_imagine$cpm_ptt_count$value$frequency, row.names = cpm_ptt_cnames_imagine)
+colnames(cpm_ptt_cpimagine) <- "Imagery" 
+cpm_ptt_cpimagine <- cpm_ptt_cpimagine %>% dplyr::mutate(id = cpm_ptt_cnames_imagine)
+```
+
+```{r}
+cpm_ptt_c_view <- cpm_ptt_cp %>% dplyr::filter(condition == "View") %>% Hmisc::describe(cpm_ptt_cp$cpm_ptt_count)
+cpm_ptt_cnames_view <- cpm_ptt_c_view$cpm_ptt_count$value$value
+
+cpm_ptt_cpview <- data.frame(cpm_ptt_c_view$cpm_ptt_count$value$frequency, row.names = cpm_ptt_cnames_view)
+colnames(cpm_ptt_cpview) <- "View" 
+cpm_ptt_cpview <- cpm_ptt_cpview %>% dplyr::mutate(id = cpm_ptt_cnames_view)
+```
+
+```{r}
+cpm_ptt_c_vr <- cpm_ptt_cp %>% dplyr::filter(condition == "VR") %>% Hmisc::describe(cpm_ptt_cp$cpm_ptt_count)
+cpm_ptt_cnames_vr <- cpm_ptt_c_vr$cpm_ptt_count$value$value
+
+cpm_ptt_cpvr <- data.frame(cpm_ptt_c_vr$cpm_ptt_count$value$frequency, row.names = cpm_ptt_cnames_vr)
+colnames(cpm_ptt_cpvr) <- "VR" 
+cpm_ptt_cpvr <- cpm_ptt_cpvr %>% dplyr::mutate(id = cpm_ptt_cnames_vr)
+```
+
+```{r}
+cpm_ptt_cp_bi <- dplyr::full_join(cpm_ptt_cpbaseline,cpm_ptt_cpimagine, by = "id") 
+cpm_ptt_cp_biv <- dplyr::full_join(cpm_ptt_cp_bi,cpm_ptt_cpview, by = "id")
+cpm_ptt_cp_t <- dplyr::full_join(cpm_ptt_cp_biv,cpm_ptt_cpvr, by = "id")
+cpm_ptt_cp_t <- cpm_ptt_cp_t %>% replace(is.na(.), 0) %>% dplyr::select(Baseline,Imagery,View,VR)
+rownames(cpm_ptt_cp_t) <- cpm_ptt_cp_biv$id
+```
+
+
+```{r}
+cpm_ptt_hc_t
+cpm_ptt_cp_t
+```
+
+Fisher´s tests
+CP
+```{r}
+stats::fisher.test(cpm_ptt_cp_t)
+# No differences
+```
+Fisher´s tests
+HC
+```{r}
+stats::fisher.test(cpm_ptt_hc_t)
+# Sig. differences
+```
+
+
+```{r}
+cpm_ptt_hc_t %>% select(-Baseline) %>% stats::fisher.test()
+# No sig. differences without Baseline
+```
+```{r}
+cpm_ptt_hc_t %>% select(Baseline,VR) %>% stats::fisher.test()
+# Sig. differences between Baseline and VR
+```
+
+```{r}
+cpm_ptt_hc_t %>% select(Baseline,View) %>% stats::fisher.test()
+# Sig. differences between Baseline and View
+```
+
+```{r}
+cpm_ptt_hc_t %>% select(Baseline,Imagery) %>% stats::fisher.test()
+# No sig. differences between Baseline and Imagery
+```
+
+Prepare CPM_PDT and PTT data for p-adjusting
+PDT
+```{r}
+g_pdt <- aov_cpm_dif_pdt %>% dplyr::group_by(gruppe) %>%
+       rstatix::pairwise_t_test(cpm_dif_pdt ~ condition, paired = TRUE, p.adjust.method = "none", pool.sd = FALSE)
+
+
+g_pdt <- g_pdt %>% dplyr::mutate(n = 1:length(g_pdt$group1)) %>% dplyr::rename(gruppe_condition = gruppe)
+```
+
+```{r}
+c_pdt <- aov_cpm_dif_pdt %>% dplyr::group_by (condition) %>%
+       rstatix::pairwise_t_test(cpm_dif_pdt ~ gruppe, paired = FALSE, p.adjust.method = "none", pool.sd = FALSE)
+
+
+c_pdt <- c_pdt %>% dplyr::mutate(n = 1:length(c_pdt$group1)) %>% dplyr::rename(gruppe_condition = condition)
+```
+
+```{r}
+cpm_pdt_mht <- dplyr::bind_rows(g_pdt,c_pdt)
+#saveRDS(cpm_pdt_mht, "cpm_pdt_mht.rds")
+```
+
+
+PTT
+```{r}
+g_ptt <- aov_cpm_dif_ptt %>% dplyr::group_by(gruppe) %>%
+        rstatix::pairwise_t_test(
+         cpm_dif_ptt ~ condition, paired = TRUE, 
+         p.adjust.method = "none", pool.sd = FALSE)
+
+g_ptt <- g_ptt %>% dplyr::mutate(n = 1:length(g_ptt$group1)) %>% dplyr::rename(gruppe_condition = gruppe)
+```
+
+```{r}
+c_ptt <- aov_cpm_dif_ptt %>% dplyr::group_by(condition) %>%
+        rstatix::pairwise_t_test(
+         cpm_dif_ptt ~ gruppe, paired = FALSE, 
+         p.adjust.method = "none", pool.sd = FALSE)
+
+c_ptt <- c_ptt %>% dplyr::mutate(n = 1:length(c_ptt$group1)) %>% dplyr::rename(gruppe_condition = condition)
+```
+
+
+```{r}
+cpm_ptt_mht <- dplyr::bind_rows(g_ptt,c_ptt)
+#saveRDS(cpm_ptt_mht, "cpm_ptt_mht.rds")
+```
+
+
+END
+
+
+
+

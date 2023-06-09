@@ -1,0 +1,447 @@
+
+
+
+```{r include=FALSE}
+  library(car)
+  library(dplyr)
+  library(MOTE)
+```
+
+Load post-hoc-test data from the different analysis
+```{r}
+dom_pdt_mht <- readRDS("dom_pdt_mht.rds")
+dom_ptt_mht <- readRDS("dom_ptt_mht_neu.rds")
+cpm_pdt_mht <- readRDS("cpm_pdt_mht.rds")
+cpm_ptt_mht <- readRDS("cpm_ptt_mht_neu.rds")
+spat_pdt_mht <- readRDS("spat_pdt_mht.rds")
+```
+
+Bind everything to one df
+```{r}
+all <- dplyr::bind_rows(dom_pdt_mht,dom_ptt_mht,cpm_pdt_mht,cpm_ptt_mht,spat_pdt_mht )
+```
+
+Adjust p values
+```{r}
+all$p.adj <- stats::p.adjust(all$p, method = "BH")
+```
+
+Recode so that we end up with following columns:
+p.sig = is original p value significant?
+p.adj.signif = is adjusted p value significant?
+p.adj = adjusted p values
+p = oroginal p value
+```{r}
+all <- all %>% mutate(p.sig = p.adj.signif) %>% mutate(p.adj.signif = p.adj)
+all$p.adj.signif <- car::recode(all$p.adj.signif, "0:0.001 = '***'; 0.001000001:0.01 = '**'; 0.010000001:0.05 = '*';
+                                  0.050000001:1 = 'ns'")  
+
+all
+```
+
+
+Get only significant results + give the test an id from 1:23
+```{r}
+all_d <- all %>% dplyr::filter(p.adj.signif != "ns") %>% dplyr::mutate(n_sig = 1:23)
+```
+
+Get df with only paired t-tests
+```{r}
+all_paired <- all_d %>% dplyr::filter(gruppe_condition == "HC" | gruppe_condition == "CP" | gruppe_condition == "spat_pdt_neu" | 	
+gruppe_condition == "cpm_dif_ptt" | gruppe_condition == "dom_ptt") %>% mutate(n_paired = 1:17)
+```
+
+get df with only independent t-tests
+```{r}
+all_normal <- all_d %>% dplyr::filter(gruppe_condition != "HC" & gruppe_condition != "CP" & gruppe_condition != "spat_pdt_neu" & gruppe_condition != "dom_ptt" & gruppe_condition != "cpm_dif_ptt") %>% mutate(n_normal = 18:23)
+```
+
+Create a df for every significant paired t-test containing ES,CI
+1
+```{r}
+t1 <-  as.matrix(all_paired[1,7])
+n1 <-  as.matrix(all_paired[1,5])
+es1 <- MOTE::d.dep.t.diff.t(t1, n1, a = 0.05)
+
+df1 <- data.frame(d = es1$d[1,1],
+                  low = es1$dlow[1,1],
+                  high = es1$dhigh[1,1],
+                  stat = es1$t[1,1],
+                  n_paired = 1,
+                  n = es1$n[1,1])
+
+df1
+```
+
+2
+```{r}
+t2 <-  as.matrix(all_paired[2,7])
+n2 <-  as.matrix(all_paired[2,5])
+es2 <- MOTE::d.dep.t.diff.t(t2, n2, a = 0.05)
+df2 <- data.frame(d = es2$d[1,1],
+                  low = es2$dlow[1,1],
+                  high = es2$dhigh[1,1],
+                  stat = es2$t[1,1],
+                  n_paired = 2,
+                  n = es2$n[1,1])
+```
+
+3
+```{r}
+t3 <-  as.matrix(all_paired[3,7])
+n3 <-  as.matrix(all_paired[3,5])
+es3 <- MOTE::d.dep.t.diff.t(t3, n3, a = 0.05)
+df3 <- data.frame(d = es3$d[1,1],
+                  low = es3$dlow[1,1],
+                  high = es3$dhigh[1,1],
+                  stat = es3$t[1,1],
+                  n_paired = 3,
+                  n = es3$n[1,1])
+```
+
+
+4
+```{r}
+t4 <-  as.matrix(all_paired[4,7])
+n4 <-  as.matrix(all_paired[4,5])
+es4 <- MOTE::d.dep.t.diff.t(t4, n4, a = 0.05)
+df4 <- data.frame(d = es4$d[1,1],
+                  low = es4$dlow[1,1],
+                  high = es4$dhigh[1,1],
+                  stat = es4$t[1,1],
+                  n_paired = 4,
+                  n = es4$n[1,1])
+```
+
+
+5
+```{r}
+t5 <-  as.matrix(all_paired[5,7])
+n5 <-  as.matrix(all_paired[5,5])
+es5 <- MOTE::d.dep.t.diff.t(t5, n5, a = 0.05)
+df5 <- data.frame(d = es5$d[1,1],
+                  low = es5$dlow[1,1],
+                  high = es5$dhigh[1,1],
+                  stat = es5$t[1,1],
+                  n_paired = 5,
+                  n = es5$n[1,1])
+```
+
+
+6
+```{r}
+t6 <-  as.matrix(all_paired[6,7])
+n6 <-  as.matrix(all_paired[6,5])
+es6 <- MOTE::d.dep.t.diff.t(t6, n6, a = 0.05)
+df6 <- data.frame(d = es6$d[1,1],
+                  low = es6$dlow[1,1],
+                  high = es6$dhigh[1,1],
+                  stat = es6$t[1,1],
+                  n_paired = 6,
+                  n = es6$n[1,1])
+```
+
+7
+```{r}
+t7 <-  as.matrix(all_paired[7,7])
+n7 <-  as.matrix(all_paired[7,5])
+es7 <- MOTE::d.dep.t.diff.t(t7, n7, a = 0.05)
+df7 <- data.frame(d = es7$d[1,1],
+                  low = es7$dlow[1,1],
+                  high = es7$dhigh[1,1],
+                  stat = es7$t[1,1],
+                  n_paired = 7,
+                  n = es7$n[1,1])
+```
+
+8
+```{r}
+t8 <-  as.matrix(all_paired[8,7])
+n8 <-  as.matrix(all_paired[8,5])
+es8 <- MOTE::d.dep.t.diff.t(t8, n8, a = 0.05)
+df8 <- data.frame(d = es8$d[1,1],
+                  low = es8$dlow[1,1],
+                  high = es8$dhigh[1,1],
+                  stat = es8$t[1,1],
+                  n_paired = 8,
+                  n = es8$n[1,1])
+```
+
+9
+```{r}
+t9 <-  as.matrix(all_paired[9,7])
+n9 <-  as.matrix(all_paired[9,5])
+es9 <- MOTE::d.dep.t.diff.t(t9, n9, a = 0.05)
+df9 <- data.frame(d = es9$d[1,1],
+                  low = es9$dlow[1,1],
+                  high = es9$dhigh[1,1],
+                  stat = es9$t[1,1],
+                  n_paired = 9,
+                  n = es9$n[1,1])
+```
+
+10
+
+```{r}
+t10 <-  as.matrix(all_paired[10,7])
+n10 <-  as.matrix(all_paired[10,5])
+es10 <- MOTE::d.dep.t.diff.t(t10, n10, a = 0.05)
+df10 <- data.frame(d = es10$d[1,1],
+                  low = es10$dlow[1,1],
+                  high = es10$dhigh[1,1],
+                  stat = es10$t[1,1],
+                  n_paired = 10,
+                  n = es10$n[1,1])
+```
+
+11
+```{r}
+t11 <-  as.matrix(all_paired[11,7])
+n11 <-  as.matrix(all_paired[11,5])
+es11 <- MOTE::d.dep.t.diff.t(t11, n11, a = 0.05)
+df11 <- data.frame(d = es11$d[1,1],
+                  low = es11$dlow[1,1],
+                  high = es11$dhigh[1,1],
+                  stat = es11$t[1,1],
+                  n_paired = 11,
+                  n = es11$n[1,1])
+```
+
+12
+```{r}
+t12 <-  as.matrix(all_paired[12,7])
+n12 <-  as.matrix(all_paired[12,5])
+es12 <- MOTE::d.dep.t.diff.t(t12, n12, a = 0.05)
+df12 <- data.frame(d = es12$d[1,1],
+                  low = es12$dlow[1,1],
+                  high = es12$dhigh[1,1],
+                  stat = es12$t[1,1],
+                  n_paired = 12,
+                  n = es12$n[1,1])
+```
+
+
+13
+```{r}
+t13 <-  as.matrix(all_paired[13,7])
+n13 <-  as.matrix(all_paired[13,5])
+es13 <- MOTE::d.dep.t.diff.t(t13, n13, a = 0.05)
+df13 <- data.frame(d = es13$d[1,1],
+                  low = es13$dlow[1,1],
+                  high = es13$dhigh[1,1],
+                  stat = es13$t[1,1],
+                  n_paired = 13,
+                  n = es13$n[1,1])
+```
+
+
+14
+```{r}
+t14 <-  as.matrix(all_paired[14,7])
+n14 <-  as.matrix(all_paired[14,5])
+es14 <- MOTE::d.dep.t.diff.t(t14, n14, a = 0.05)
+df14 <- data.frame(d = es14$d[1,1],
+                  low = es14$dlow[1,1],
+                  high = es14$dhigh[1,1],
+                  stat = es14$t[1,1],
+                  n_paired = 14,
+                  n = es14$n[1,1])
+```
+
+15
+```{r}
+t15 <-  as.matrix(all_paired[15,7])
+n15 <-  as.matrix(all_paired[15,5])
+es15 <- MOTE::d.dep.t.diff.t(t15, n15, a = 0.05)
+df15 <- data.frame(d = es15$d[1,1],
+                  low = es15$dlow[1,1],
+                  high = es15$dhigh[1,1],
+                  stat = es15$t[1,1],
+                  n_paired = 15,
+                  n = es15$n[1,1])
+```
+
+16
+```{r}
+t16 <-  as.matrix(all_paired[16,7])
+n16 <-  as.matrix(all_paired[16,5])
+es16 <- MOTE::d.dep.t.diff.t(t16, n16, a = 0.05)
+df16 <- data.frame(d = es16$d[1,1],
+                  low = es16$dlow[1,1],
+                  high = es16$dhigh[1,1],
+                  stat = es16$t[1,1],
+                  n_paired = 16,
+                  n = es16$n[1,1])
+```
+
+17
+```{r}
+t17 <-  as.matrix(all_paired[17,7])
+n17 <-  as.matrix(all_paired[17,5])
+es17 <- MOTE::d.dep.t.diff.t(t17, n17, a = 0.05)
+df17 <- data.frame(d = es17$d[1,1],
+                  low = es17$dlow[1,1],
+                  high = es17$dhigh[1,1],
+                  stat = es17$t[1,1],
+                  n_paired = 17,
+                  n = es17$n[1,1])
+```
+
+
+Bind pairedt t-test stats together
+```{r}
+paired_stats <- rbind(df1,df2,df3,df4,df5,df6,df7,df8,df9,
+               df10,df11,df12,df13,df14,df15,df16,df17)
+```
+
+Add p values etc.
+```{r}
+all_paired2 <- merge(all_paired,paired_stats,by="n_paired")
+```
+
+
+Do the same for independent t-tests
+
+18    1
+```{r}
+t18 <-  as.matrix(all_normal[1,7])
+n18 <-  as.matrix(all_normal[1,5])
+n1818 <- as.matrix(all_normal[1,6])
+es18 <- MOTE::d.ind.t.t(t18, n18, n1818, a = 0.05)
+
+
+
+
+df18 <- data.frame(d = es18$d[1,1],
+                  low = es18$dlow[1,1],
+                  high = es18$dhigh[1,1],
+                  stat = es18$t[1,1],
+                  n_normal = 18,
+                  n1a = es18$n1[1,1],
+                  n2a = es18$n2[1,1])
+```
+
+19    2
+```{r}
+t19 <-  as.matrix(all_normal[2,7])
+n19 <-  as.matrix(all_normal[2,5])
+n1919 <- as.matrix(all_normal[2,6])
+es19 <- MOTE::d.ind.t.t(t19, n19, n1919, a = 0.05)
+
+
+
+
+df19 <- data.frame(d = es19$d[1,1],
+                  low = es19$dlow[1,1],
+                  high = es19$dhigh[1,1],
+                  stat = es19$t[1,1],
+                  n_normal = 19,
+                  n1a = es19$n1[1,1],
+                  n2a = es19$n2[1,1])
+```
+
+
+
+20    3
+```{r}
+t20 <-  as.matrix(all_normal[3,7])
+n20 <-  as.matrix(all_normal[3,5])
+n2020 <- as.matrix(all_normal[3,6])
+es20 <- MOTE::d.ind.t.t(t20, n20, n2020, a = 0.05)
+
+
+
+
+df20 <- data.frame(d = es20$d[1,1],
+                  low = es20$dlow[1,1],
+                  high = es20$dhigh[1,1],
+                  stat = es20$t[1,1],
+                  n_normal = 20,
+                  n1a = es20$n1[1,1],
+                  n2a = es20$n2[1,1])
+```
+
+
+21    4
+```{r}
+t21 <-  as.matrix(all_normal[4,7])
+n21 <-  as.matrix(all_normal[4,5])
+n2121 <- as.matrix(all_normal[4,6])
+es21 <- MOTE::d.ind.t.t(t21, n21, n2121, a = 0.05)
+
+
+
+
+df21 <- data.frame(d = es21$d[1,1],
+                  low = es21$dlow[1,1],
+                  high = es21$dhigh[1,1],
+                  stat = es21$t[1,1],
+                  n_normal = 21,
+                  n1a = es21$n1[1,1],
+                  n2a = es21$n2[1,1])
+```
+
+
+
+
+22    5
+```{r}
+t22 <-  as.matrix(all_normal[5,7])
+n22 <-  as.matrix(all_normal[5,5])
+n2222 <- as.matrix(all_normal[5,6])
+es22 <- MOTE::d.ind.t.t(t22, n22, n2222, a = 0.05)
+
+
+
+
+df22 <- data.frame(d = es22$d[1,1],
+                  low = es22$dlow[1,1],
+                  high = es22$dhigh[1,1],
+                  stat = es22$t[1,1],
+                  n_normal = 22,
+                  n1a = es22$n1[1,1],
+                  n2a = es22$n2[1,1])
+```
+
+
+
+23    6
+```{r}
+t23 <-  as.matrix(all_normal[6,7])
+n23 <-  as.matrix(all_normal[6,5])
+n2323 <- as.matrix(all_normal[6,6])
+es23 <- MOTE::d.ind.t.t(t23, n23, n2323, a = 0.05)
+
+
+
+
+df23 <- data.frame(d = es23$d[1,1],
+                  low = es23$dlow[1,1],
+                  high = es23$dhigh[1,1],
+                  stat = es23$t[1,1],
+                  n_normal = 23,
+                  n1a = es23$n1[1,1],
+                  n2a = es23$n2[1,1])
+```
+
+
+
+```{r}
+normal_stats <- rbind(df18,df19,df20,df21,df22,df23)
+```
+
+
+```{r}
+all_normal2 <- merge(all_normal,normal_stats, by = "n_normal")
+all_normal2
+```
+
+
+Select only important columns
+```{r}
+paired_final <- all_paired2 %>% dplyr::select(2:12,14,16:18)
+paired_final
+
+normal_final <- all_normal2 %>% dplyr::select(2:12,14,16:18)
+normal_final
+```

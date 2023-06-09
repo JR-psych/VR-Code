@@ -1,0 +1,166 @@
+---
+title: "VR Analysis"
+author: "DB, JR"
+date: "21 9 2021"
+output: html_document
+---
+
+
+
+Load packages
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+  library(Rmisc) 
+  library(readxl)
+  library(ggpubr) 
+  library(rstatix) 
+  library(WRS2)
+  library(dplyr) 
+  library(effectsize)
+  library(dplyr)
+  library(MOTE)
+```
+
+Prepare data
+```{r}
+long_d <- readRDS("long_d_0.rds")
+
+long_d <- long_d %>% mutate(view_pdt = t03_pdt0) %>%
+                   select(id,condition,gruppe,view_pdt,t01_pdt0,t02_pdt0)
+
+aov_view_pdt <- long_d %>% filter(condition == "View") %>% droplevels()
+
+#Creata df to test if there is a SSP within effect
+aov_oa <- aov_view_pdt %>% select(id,gruppe,condition,t01_pdt0,t02_pdt0) %>% mutate(view_pdt = (t01_pdt0 + t02_pdt0)/2) %>%
+                              select(id,gruppe,condition,view_pdt)
+
+aov_oa$condition <- car::recode(aov_oa$condition, "'View' = 't01 + t02/2'")  
+aov_bind <- bind_rows(aov_view_pdt,aov_oa) %>% select(id,gruppe,condition,view_pdt)
+aov_view_pdt <- aov_bind
+
+aov_view_pdt$condition <- car::recode(aov_view_pdt$condition, "'View' = 'Spat Sum'")  
+aov_view_pdt <- aov_view_pdt %>% dplyr::select(id,gruppe,condition,view_pdt)
+ 
+```
+
+
+Get descriptive statistics grouped by group and condition
+("gruppe" = "group" in German) 
+```{r}
+mean_view_pdt_gruppe<- aov_view_pdt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_pdt = mean(view_pdt),
+            median_view_pdt = median(view_pdt),
+            sd_view_pdt = sd(view_pdt),
+            iqr_view_pdt = IQR(view_pdt),
+            min_view_pdt = min(view_pdt),
+            max_view_pdt = max(view_pdt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(view_pdt ~ gruppe, data = aov_view_pdt, ci = .95))
+
+mean_view_pdt_condition <-  aov_view_pdt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_pdt = mean(view_pdt),
+            median_view_pdt = median(view_pdt),
+            sd_view_pdt = sd(view_pdt),
+            iqr_view_pdt = IQR(view_pdt),
+            min_view_pdt = min(view_pdt),
+            max_view_pdt = max(view_pdt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(view_pdt ~ condition, data = aov_view_pdt, ci = .95))
+
+ci_gc =  Rmisc::group.CI(view_pdt ~ condition * gruppe, data = aov_view_pdt, ci = .95)
+
+mean_view_pdt_condition_gruppe <- aov_view_pdt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_pdt = mean(view_pdt),
+            median_view_pdt = median(view_pdt),
+            sd_view_pdt = sd(view_pdt),
+            iqr_view_pdt = IQR(view_pdt),
+            min_view_pdt = min(view_pdt),
+            max_view_pdt = max(view_pdt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+           
+```
+
+#Check assumptions for paired t-test
+```{r}
+bp_view_pdt <- ggpubr::ggboxplot(aov_view_pdt, x = "gruppe", y = "view_pdt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_view_pdt
+
+outliers_view_pdt <- aov_view_pdt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(view_pdt)
+outliers_view_pdt
+
+shapiro_view_pdt <- aov_view_pdt %>%
+  group_by(gruppe, condition) %>%
+  shapiro_test(view_pdt)
+shapiro_view_pdt
+
+
+
+nmv <- long_d %>% dplyr::filter(condition == "View") %>% dplyr::mutate(diff = view_pdt-((t01_pdt0 + t02_pdt0)/2))
+
+shapiro_pdt <- nmv %>%
+  dplyr::group_by(gruppe) %>%
+  rstatix::shapiro_test(diff)
+shapiro_pdt
+
+
+out_pdt <- nmv %>%
+  dplyr::group_by(gruppe) %>%
+  rstatix::identify_outliers(diff)
+out_pdt
+
+# No outliers 
+# No extreme outlier regarding the differences between the two conditions 
+# Differences are normal distributed
+# HC data not normal distributed
+```
+
+```{r}
+aov_view_pdt %>% dplyr::group_by(gruppe) %>%
+        rstatix::t_test(
+         view_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none")
+
+```
+
+```{r}
+aov_view_pdt %>% dplyr::filter(gruppe == "HC") %>%
+        rstatix::wilcox_test(
+         view_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none")
+# No differences
+```
+
+
+
+
+
+
+
+
+
+
+
+
+Get ES and CI
+```{r}
+tresult <- aov_view_pdt %>% dplyr::group_by(gruppe)%>%
+        rstatix::t_test(
+         view_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none")
+
+tresult <- as.data.frame(tresult)
+
+tresult_hc <- tresult %>% dplyr::filter(gruppe == "HC")
+tresult_cp <- tresult %>% dplyr::filter(gruppe == "CP")
+
+d_hc <- as.data.frame(MOTE::d.dep.t.diff.t(tresult_hc[1,"statistic"], tresult_hc[1,"n1"], a = 0.05)) %>% mutate(gruppe = "HC")
+d_hc
+
+d_cp <- as.data.frame(MOTE::d.dep.t.diff.t(tresult_cp[1,"statistic"], tresult_cp[1,"n1"], a = 0.05)) %>% mutate(gruppe = "CP")
+d_cp
+
+```
+
+
+
+
+

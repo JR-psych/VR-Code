@@ -1,0 +1,171 @@
+---
+title: "Spat_pdt - Pre_Analysis Baseline"
+author: "JR"
+date: "23.06.2023"
+output: html_document
+---
+
+
+
+Load packages
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+  library(Rmisc) 
+  library(readxl)
+  library(ggpubr) 
+  library(rstatix) 
+  library(WRS2)
+  library(dplyr) 
+  library(effectsize)
+  library(dplyr)
+  library(MOTE)
+```
+
+Prepare data
+```{r}
+long_d <- readRDS("long_d_0.rds")
+
+long_d <- long_d %>% mutate(baseline_pdt = t03_pdt0) %>%
+                   select(id,condition,gruppe,baseline_pdt,t01_pdt0,t02_pdt0)
+
+aov_baseline_pdt <- long_d %>% filter(condition == "Baseline") %>% droplevels()
+
+#Creata df to test if there is a SSP within effect
+aov_oa <- aov_baseline_pdt %>% select(id,gruppe,condition,t01_pdt0,t02_pdt0) %>% mutate(baseline_pdt = (t01_pdt0 + t02_pdt0)/2) %>%
+                              select(id,gruppe,condition,baseline_pdt)
+
+aov_oa$condition <- car::recode(aov_oa$condition, "'Baseline' = 't01 + t02/2'")  
+aov_bind <- bind_rows(aov_baseline_pdt,aov_oa) %>% select(id,gruppe,condition,baseline_pdt)
+aov_baseline_pdt <- aov_bind
+
+aov_baseline_pdt$condition <- car::recode(aov_baseline_pdt$condition, "'Baseline' = 'Spat Sum'")  
+aov_baseline_pdt <- aov_baseline_pdt %>% dplyr::select(id,gruppe,condition,baseline_pdt)
+aov_baseline_pdt 
+```
+
+
+Get descriptive statistics grouped by group and condition
+("gruppe" = "group" in German) 
+```{r}
+mean_baseline_pdt_gruppe<- aov_baseline_pdt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_pdt = mean(baseline_pdt),
+            median_baseline_pdt = median(baseline_pdt),
+            sd_baseline_pdt = sd(baseline_pdt),
+            iqr_baseline_pdt = IQR(baseline_pdt),
+            min_baseline_pdt = min(baseline_pdt),
+            max_baseline_pdt = max(baseline_pdt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(baseline_pdt ~ gruppe, data = aov_baseline_pdt, ci = .95))
+
+mean_baseline_pdt_condition <-  aov_baseline_pdt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_pdt = mean(baseline_pdt),
+            median_baseline_pdt = median(baseline_pdt),
+            sd_baseline_pdt = sd(baseline_pdt),
+            iqr_baseline_pdt = IQR(baseline_pdt),
+            min_baseline_pdt = min(baseline_pdt),
+            max_baseline_pdt = max(baseline_pdt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(baseline_pdt ~ condition, data = aov_baseline_pdt, ci = .95))
+
+ci_gc =  Rmisc::group.CI(baseline_pdt ~ condition * gruppe, data = aov_baseline_pdt, ci = .95)
+
+mean_baseline_pdt_condition_gruppe <- aov_baseline_pdt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_pdt = mean(baseline_pdt),
+            median_baseline_pdt = median(baseline_pdt),
+            sd_baseline_pdt = sd(baseline_pdt),
+            iqr_baseline_pdt = IQR(baseline_pdt),
+            min_baseline_pdt = min(baseline_pdt),
+            max_baseline_pdt = max(baseline_pdt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+           
+```
+
+#Check assumptions for paired t-test
+```{r}
+bp_baseline_pdt <- ggpubr::ggboxplot(aov_baseline_pdt, x = "gruppe", y = "baseline_pdt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_baseline_pdt
+
+shapiro_baseline_pdt <- aov_baseline_pdt %>%
+  group_by(gruppe, condition) %>%
+  shapiro_test(baseline_pdt)
+shapiro_baseline_pdt
+
+outliers_baseline_pdt <- aov_baseline_pdt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(baseline_pdt)
+outliers_baseline_pdt
+
+nmv <- long_d %>% dplyr::filter(condition == "Baseline") %>% dplyr::mutate(diff = baseline_pdt-((t01_pdt0 + t02_pdt0)/2))
+
+shapiro_pdt <- nmv %>%
+  dplyr::group_by(gruppe) %>%
+  rstatix::shapiro_test(diff)
+shapiro_pdt
+
+out_pdt <- nmv %>%
+  group_by(gruppe) %>%
+  identify_outliers(diff)
+out_pdt
+
+# No extreme outliers 
+# CP differences not normal distributed
+# CP Spat not normal distributed
+# One outlier regarding the differences
+```
+
+
+
+```{r}
+aov_baseline_pdt %>% dplyr::group_by(gruppe) %>%
+        rstatix::t_test(
+         baseline_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none")
+
+```
+
+```{r}
+aov_baseline_pdt %>% dplyr::group_by(gruppe) %>%
+        rstatix::wilcox_test(
+         baseline_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none")
+# No differences
+```
+
+Get ES and CI
+```{r}
+tresult <- aov_baseline_pdt %>% dplyr::group_by(gruppe)%>%
+        rstatix::t_test(
+         baseline_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none")
+
+tresult <- as.data.frame(tresult)
+
+tresult_hc <- tresult %>% dplyr::filter(gruppe == "HC")
+tresult_cp <- tresult %>% dplyr::filter(gruppe == "CP")
+
+d_hc <- as.data.frame(MOTE::d.dep.t.diff.t(tresult_hc[1,"statistic"], tresult_hc[1,"n1"], a = 0.05)) %>% mutate(gruppe = "HC")
+d_hc
+
+d_cp <- as.data.frame(MOTE::d.dep.t.diff.t(tresult_cp[1,"statistic"], tresult_cp[1,"n1"], a = 0.05)) %>% mutate(gruppe = "CP")
+d_cp
+
+```
+
+
+Sensitivity Analysis
+```{r}
+aov_baseline_pdt %>% dplyr::filter(id != "VR_027") %>% dplyr::group_by(gruppe) %>%
+        rstatix::t_test(
+         baseline_pdt ~ condition, paired = TRUE, 
+         p.adjust.method = "none") 
+# No differences
+```
+
+
+
+
+
+
+
+
+
+
+
+

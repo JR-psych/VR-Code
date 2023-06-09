@@ -1,0 +1,239 @@
+---
+title: "All_analysis_ssp"
+author: "JR"
+date: "23.06.2023"
+output: html_document
+---
+
+Load packages
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+  library(Rmisc) 
+  library(readxl)
+  library(ggpubr) 
+  library(rstatix) 
+  library(WRS2)
+  library(dplyr) 
+  library(effectsize)
+```
+
+Load and prepare data
+```{r}
+long_d <- readRDS("long_d_0.rds")
+
+aov_spat_pdt <- long_d %>% dplyr::mutate(spat_pdt = (t03_pdt0/((t01_pdt0 + t02_pdt0)/2))) %>%
+                   dplyr::select(id,condition,gruppe,spat_pdt) %>% droplevels()
+
+aov_spat_pdt <- arrange(aov_spat_pdt,id)
+```
+
+Descriptive stats
+```{r}
+mean_spat_pdt_gruppe <- aov_spat_pdt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_pdt = mean(spat_pdt),
+            median_spat_pdt = median(spat_pdt),
+            sd_spat_pdt = sd(spat_pdt),
+            iqr_spat_pdt = IQR(spat_pdt),
+            min_spat_pdt = min(spat_pdt),
+            max_spat_pdt = max(spat_pdt)) %>% dplyr::mutate(
+            ci_test =  Rmisc::group.CI(spat_pdt ~ gruppe, data = aov_spat_pdt, ci = .95))
+
+mean_spat_pdt_condition <-  aov_spat_pdt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_pdt = mean(spat_pdt),
+            median_spat_pdt = median(spat_pdt),
+            sd_spat_pdt = sd(spat_pdt),
+            iqr_spat_pdt = IQR(spat_pdt),
+            min_spat_pdt = min(spat_pdt),
+            max_spat_pdt = max(spat_pdt)) %>% dplyr::mutate(
+            ci_test =  Rmisc::group.CI(spat_pdt ~ condition, data = aov_spat_pdt, ci = .95))
+
+
+ci_gc =  Rmisc::group.CI(spat_pdt ~ condition * gruppe, data = aov_spat_pdt, ci = .95)
+
+mean_spat_pdt_condition_gruppe <- aov_spat_pdt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_pdt = mean(spat_pdt),
+            median_spat_pdt = median(spat_pdt),
+            sd_spat_pdt = sd(spat_pdt),
+            iqr_spat_pdt = IQR(spat_pdt),
+            min_spat_pdt = min(spat_pdt),
+            max_spat_pdt = max(spat_pdt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+           
+```
+
+Check assumptions
+```{r}
+bp_spat_pdt <- ggpubr::ggboxplot(aov_spat_pdt, x = "gruppe", y = "spat_pdt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_spat_pdt
+
+
+outliers_spat_pdt <- aov_spat_pdt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(spat_pdt)
+outliers_spat_pdt
+
+
+shapiro_spat_pdt <- aov_spat_pdt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::shapiro_test(spat_pdt)
+
+shapiro_spat_pdt
+
+
+levene_spat_pdt <- aov_spat_pdt %>%
+  dplyr::group_by(condition) %>%
+  rstatix::levene_test(spat_pdt ~ gruppe)
+levene_spat_pdt 
+
+
+spat_pdt_naf <- aov_spat_pdt %>% 
+          rstatix::drop_na(spat_pdt)
+
+
+box_spat_pdt<- rstatix::box_m(spat_pdt_naf[,"spat_pdt", drop = FALSE], spat_pdt_naf$gruppe)
+box_spat_pdt
+
+#only "Homogeneity of Covariance" is violated
+```
+
+```{r}
+anova_spat_pdt <- rstatix::anova_test(data=aov_spat_pdt, dv = spat_pdt, wid = id, between =gruppe,
+                       within= condition)
+
+rstatix::get_anova_table(anova_spat_pdt, correction = "auto")
+
+WRS2::bwtrim(spat_pdt ~ gruppe * condition, id = id, data = aov_spat_pdt)
+# condition effect found but not with the robust anova.
+```
+
+
+```{r}
+aov_spat_pdt %>%
+        rstatix::pairwise_t_test(
+         spat_pdt ~ condition, paired = TRUE, pool.sd = FALSE,
+         p.adjust.method = "none")
+
+```
+
+
+################## SSP PTT ########################################
+
+Prepare data
+```{r}
+
+aov_spat_ptt <- long_d %>% dplyr::mutate(spat_ptt = (t03_ptt/((t01_ptt + t02_ptt)/2))) %>% droplevels()
+aov_spat_ptt <- dplyr::arrange(aov_spat_ptt, id) %>%  dplyr::select(id,gruppe,condition, spat_ptt)
+ 
+```
+
+Descriptive stats
+```{r}
+mean_spat_ptt_gruppe<- aov_spat_ptt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_ptt = mean(spat_ptt),
+            median_spat_ptt = median(spat_ptt),
+            sd_spat_ptt = sd(spat_ptt),
+            iqr_spat_ptt = IQR(spat_ptt),
+            min_spat_ptt = min(spat_ptt),
+            max_spat_ptt = max(spat_ptt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(spat_ptt ~ gruppe, data = aov_spat_ptt, ci = .95))
+
+
+mean_spat_ptt_condition <-  aov_spat_ptt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_ptt = mean(spat_ptt),
+            median_spat_ptt = median(spat_ptt),
+            sd_spat_ptt = sd(spat_ptt),
+            iqr_spat_ptt = IQR(spat_ptt),
+            min_spat_ptt = min(spat_ptt),
+            max_spat_ptt = max(spat_ptt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(spat_ptt ~ condition, data = aov_spat_ptt, ci = .95))
+
+
+ci_gc =  Rmisc::group.CI(spat_ptt ~ condition * gruppe, data = aov_spat_ptt, ci = .95)
+
+mean_spat_ptt_condition_gruppe <- aov_spat_ptt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_ptt = mean(spat_ptt),
+            median_spat_ptt = median(spat_ptt),
+            sd_spat_ptt = sd(spat_ptt),
+            iqr_spat_ptt = IQR(spat_ptt),
+            min_spat_ptt = min(spat_ptt),
+            max_spat_ptt = max(spat_ptt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+           
+```
+Check assumptions
+```{r}
+bp_spat_ptt <- ggpubr::ggboxplot(aov_spat_ptt, x = "gruppe", y = "spat_ptt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_spat_ptt
+
+
+outliers_spat_ptt <- aov_spat_ptt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(spat_ptt)
+outliers_spat_ptt
+
+shapiro_spat_ptt <- aov_spat_ptt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::shapiro_test(spat_ptt)
+
+shapiro_spat_ptt
+
+
+levene_spat_ptt <- aov_spat_ptt %>%
+  dplyr::group_by(condition) %>%
+  rstatix::levene_test(spat_ptt ~ gruppe)
+levene_spat_ptt 
+
+
+
+spat_ptt_naf <- aov_spat_ptt %>% 
+          rstatix::drop_na(spat_ptt)
+
+
+box_spat_ptt<- rstatix::box_m(spat_ptt_naf[,"spat_ptt", drop = FALSE], spat_ptt_naf$gruppe)
+
+box_spat_ptt
+
+# One extreme outlier (ID_06)
+# No normality distribution for HC(View,VR) and CP(View,Imagine)
+# Homogeneity of Variances
+# No Homogeneity of Covariances
+```
+
+```{r}
+anova_spat_ptt <- rstatix::anova_test(data=aov_spat_ptt, dv= spat_ptt, wid = id, between =gruppe,
+                       within= condition)
+
+rstatix::get_anova_table(anova_spat_ptt, correction = "auto")
+
+WRS2::bwtrim(spat_ptt ~ gruppe * condition, id = id, data = aov_spat_ptt)
+# No effects
+```
+
+
+Sensitivity analysis           
+```{r}
+aov_spat_pttOD <- aov_spat_ptt %>% dplyr::filter(id != "VR_006")
+anova_spat_pttOD <- rstatix::anova_test(data=aov_spat_pttOD, dv= spat_ptt, wid = id, between =gruppe,
+                       within= condition)
+
+rstatix::get_anova_table(anova_spat_pttOD)
+# No differences
+```
+Prepare data for p-adjust
+```{r}
+spat_pdt_mht <- aov_spat_pdt %>%
+        rstatix::pairwise_t_test(
+         spat_pdt ~ condition, paired = TRUE, pool.sd = FALSE,
+         p.adjust.method = "none") 
+
+spat_pdt_mht <- spat_pdt_mht %>% dplyr::mutate(n = 1:length(spat_pdt_mht$group1)) %>% dplyr::rename(gruppe_condition = .y.)
+#saveRDS(spat_pdt_mht, "spat_pdt_mht.rds")
+```
+
+
+
+
+
+
+
+
+

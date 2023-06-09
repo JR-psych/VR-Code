@@ -1,0 +1,140 @@
+---
+title: "All_analysis_tsp"
+author: "JR"
+date: "23.06.2023"
+output: html_document
+---
+
+Load packages
+```{r include=FALSE}
+  library(Rmisc) 
+  library(readxl)
+  library(ggpubr) 
+  library(rstatix) 
+  library(WRS2)
+  library(dplyr) 
+  library(effectsize)
+```
+
+Load and prepare data
+```{r}
+long_d <- readRDS("long_d_0.rds")
+# Excluded due to technical difficulties: Missing data
+aov_tsp <- long_d %>%   dplyr::filter(id != "VR_017") %>%
+                        dplyr::filter(id != "VR_040") %>%
+                        dplyr::filter(id != "VR_044") %>%
+                        dplyr::filter(id != "VR_054") %>%
+                        dplyr::filter(id != "VR_058")
+
+# Excluded because they did not rate any of the 10 stimuli as painful
+aov_tsp <- aov_tsp %>%  dplyr::filter(id != "VR_010" & id != "VR_011" & id != "VR_014" & id != "VR_019" & id != "VR_024" & id != "VR_026" & id != "VR_029"& id != "VR_030"& id != "VR_031"& id != "VR_032"& id != "VR_033"& id != "VR_034"& id != "VR_038" ) %>%
+ droplevels()
+
+aov_tsp <- aov_tsp %>%  dplyr::mutate(tsp_dif = ((t04_r7 + t04_r8 + t04_r9)/3)-((t04_r0 + t04_r1 + t04_r2)/3))
+aov_tsp <- aov_tsp %>%  dplyr::select(id,gruppe,condition,tsp_dif)
+
+```
+
+Get descriptive statistics grouped by group and condition
+("gruppe" = "group" in German) 
+```{r}
+mean_tsp_dif_gruppe<- aov_tsp %>%
+   dplyr::group_by(gruppe) %>%
+   dplyr::summarise(mean_tsp = mean(tsp_dif),
+            median_tsp_dif = median(tsp_dif),
+            sd_tsp_dif = sd(tsp_dif),
+            iqr_tsp_dif = IQR(tsp_dif),
+            min_tsp_dif = min(tsp_dif),
+            max_tsp_dif = max(tsp_dif)) %>% mutate(
+            ci_test =  Rmisc::group.CI(tsp_dif ~ gruppe, data = aov_tsp, ci = .95))
+
+
+mean_tsp_dif_condition <-  aov_tsp %>%  dplyr::group_by(condition) %>%
+     dplyr::summarise(mean_tsp = mean(tsp_dif),
+            median_tsp_dif = median(tsp_dif),
+            sd_tsp_dif = sd(tsp_dif),
+            iqr_tsp_dif = IQR(tsp_dif),
+            min_tsp_dif = min(tsp_dif),
+            max_tsp_dif = max(tsp_dif)) %>% mutate(
+            ci_test =  Rmisc::group.CI(tsp_dif ~ condition, data = aov_tsp, ci = .95))
+
+
+ci_gc =  Rmisc::group.CI(tsp_dif ~ condition * gruppe, data = aov_tsp, ci = .95)
+
+mean_tsp_dif_condition_gruppe <- aov_tsp %>%  dplyr::group_by(gruppe, condition) %>%
+     dplyr::summarise(mean_tsp = mean(tsp_dif),
+            median_tsp_dif = median(tsp_dif),
+            sd_tsp_dif = sd(tsp_dif),
+            iqr_tsp_dif = IQR(tsp_dif),
+            min_tsp_dif = min(tsp_dif),
+            max_tsp_dif = max(tsp_dif)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+           
+```
+
+Testing assumptions
+```{r}
+bp_tsp <- ggpubr::ggboxplot(aov_tsp, x = "gruppe", y = "tsp_dif", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_tsp
+
+
+outliers_tsp <- aov_tsp %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(tsp_dif)
+outliers_tsp
+
+
+shapiro_tsp <- aov_tsp %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::shapiro_test(tsp_dif)
+shapiro_tsp
+
+levene_tsp <- aov_tsp %>%
+  dplyr::group_by(condition) %>%
+  rstatix::levene_test(tsp_dif ~ gruppe)
+levene_tsp
+
+
+box_tsp<- rstatix::box_m(aov_tsp[,"tsp_dif", drop = FALSE], aov_tsp$gruppe)
+box_tsp
+
+# Extreme outliers: ID_13,ID_51,ID_55.
+# Normal distribution for HC(all) and CP(View)
+# No variance homogeneity for Imagine and View
+# No co variance homogeneity
+```
+
+Calculating mixed anova and robust mixed anova
+```{r}
+anovatsp <- rstatix::anova_test(data=aov_tsp, dv= tsp_dif, wid = id, between =gruppe,
+                       within= condition, effect.size = "pes")
+
+rstatix::get_anova_table(anovatsp, correction = "auto")
+
+WRS2::bwtrim(tsp_dif ~ gruppe * condition, id = id, data = aov_tsp)
+# Significant group effect
+```
+
+Get CIs for PES
+```{r}
+tsp_e <- aov(tsp_dif ~ condition * gruppe + Error(id/condition), data = aov_tsp)
+eta_squared(tsp_e,alternative = "two.sided", partial = TRUE)
+```
+
+
+Sensitivity analysis
+```{r}
+aov_tspod <- aov_tsp %>% dplyr::filter(id != "VR_013") %>%
+                         dplyr::filter(id != "VR_051") %>%
+                        dplyr::filter(id != "VR_055") 
+
+anovatspod <- rstatix::anova_test(data=aov_tspod, dv= tsp_dif, wid = id, between =gruppe,
+                       within= condition)
+
+rstatix::get_anova_table(anovatspod, correction = "auto")
+
+#No differences
+```
+
+
+
+

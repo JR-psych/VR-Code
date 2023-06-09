@@ -1,0 +1,193 @@
+---
+title: "CPM_ptt - Pre Analysis Baseline"
+author: "JR"
+date: "23.06.2023"
+output: html_document
+---
+
+Load packages
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+  library(Rmisc) 
+  library(readxl)
+  library(ggpubr) 
+  library(rstatix) 
+  library(WRS2)
+  library(dplyr) 
+  library(effectsize)
+  library(dplyr)
+  library(MOTE)
+```
+
+Load and prepare data
+Excluding participants due to technical errors
+```{r}
+long_d <- readRDS("long_d_0.rds")
+
+long_d <- long_d %>% select(id,gruppe,condition,t05_ptt,t01_ptt) %>% dplyr::filter(id != "VR_001") %>%
+                                       dplyr::filter(id != "VR_010") %>%
+                                       dplyr::filter(id != "VR_029") %>%
+                                       dplyr::filter(id != "VR_048") 
+
+aov_baseline_ptt <- long_d %>% dplyr::mutate(baseline_ptt = t05_ptt) %>%
+                                        dplyr::select(id,gruppe,condition,baseline_ptt,t01_ptt)
+
+aov_baseline_ptt <- aov_baseline_ptt %>% dplyr::filter(condition == "Baseline") %>% droplevels()
+
+
+aov_oa <- aov_baseline_ptt %>% dplyr::select(id,gruppe,condition,t01_ptt) %>% mutate(baseline_ptt = t01_ptt) %>%
+                              dplyr::select(id,gruppe,condition,baseline_ptt)
+
+aov_oa$condition <- car::recode(aov_oa$condition, "'Baseline' = 'Dom'")  
+  
+  
+aov_bind <- dplyr::bind_rows(aov_baseline_ptt,aov_oa) %>% select(id,gruppe,condition,baseline_ptt)
+
+aov_baseline_ptt <- aov_bind
+aov_baseline_ptt$condition <- car::recode(aov_baseline_ptt$condition, "'Baseline' = 'Cpm'")
+aov_baseline_ptt
+```
+
+
+
+Get descriptive statistics grouped by group and condition
+("gruppe" = "group" in German)
+```{r}
+mean_baseline_ptt_gruppe<- aov_baseline_ptt %>%
+  dplyr::group_by(gruppe) %>%
+  dplyr::summarise(mean_ptt = mean(baseline_ptt),
+            median_baseline_ptt = median(baseline_ptt),
+            sd_baseline_ptt = sd(baseline_ptt),
+            iqr_baseline_ptt = IQR(baseline_ptt),
+            min_baseline_ptt = min(baseline_ptt),
+            max_baseline_ptt = max(baseline_ptt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(baseline_ptt ~ gruppe, data = aov_baseline_ptt, ci = .95))
+
+
+mean_baseline_ptt_condition <-  aov_baseline_ptt %>% dplyr::group_by(condition) %>%
+    dplyr::summarise(mean_ptt = mean(baseline_ptt),
+            median_baseline_ptt = median(baseline_ptt),
+            sd_baseline_ptt = sd(baseline_ptt),
+            iqr_baseline_ptt = IQR(baseline_ptt),
+            min_baseline_ptt = min(baseline_ptt),
+            max_baseline_ptt = max(baseline_ptt)) %>% mutate(
+            ci_test =  Rmisc::group.CI(baseline_ptt ~ condition, data = aov_baseline_ptt, ci = .95))
+
+
+ci_gc =  Rmisc::group.CI(baseline_ptt ~ condition * gruppe, data = aov_baseline_ptt, ci = .95)
+
+mean_baseline_ptt_condition_gruppe <- aov_baseline_ptt %>% dplyr::group_by(gruppe, condition) %>%
+    dplyr::summarise(mean_ptt = mean(baseline_ptt),
+            median_baseline_ptt = median(baseline_ptt),
+            sd_baseline_ptt = sd(baseline_ptt),
+            iqr_baseline_ptt = IQR(baseline_ptt),
+            min_baseline_ptt = min(baseline_ptt),
+            max_baseline_ptt = max(baseline_ptt)) %>% dplyr::left_join(ci_gc, by = c("gruppe","condition"))
+
+```
+
+
+
+#Check assumptions for paired t-test
+```{r}
+bp_baseline_ptt <- ggpubr::ggboxplot(aov_baseline_ptt, x = "gruppe", y = "baseline_ptt", color = "condition", palette = "jco" , add = c("mean_se"))
+bp_baseline_ptt
+
+
+outliers_baseline_ptt <- aov_baseline_ptt %>%
+  dplyr::group_by(gruppe, condition) %>%
+  rstatix::identify_outliers(baseline_ptt)
+outliers_baseline_ptt
+
+
+shapiro_baseline_ptt <- aov_baseline_ptt %>%
+  group_by(gruppe, condition) %>%
+  shapiro_test(baseline_ptt)
+shapiro_baseline_ptt
+
+nmv <- long_d %>% filter(condition == "Baseline") %>% dplyr::mutate(diff = t05_ptt - t01_ptt) %>% dplyr::select(id,gruppe,condition,diff)
+
+shapiro_ptt <- nmv %>%
+  dplyr::group_by(gruppe) %>%
+  rstatix::shapiro_test(diff)
+shapiro_ptt
+
+out_ptt <- nmv %>%
+  dplyr::group_by(gruppe) %>%
+  rstatix::identify_outliers(diff)
+out_ptt
+
+# No outliers
+# Differences are normal distributed
+# HC data not normal distributed
+```
+
+
+```{r}
+aov_baseline_ptt %>% dplyr::group_by(gruppe)%>%
+        rstatix::t_test(
+         baseline_ptt ~ condition, paired = TRUE,p.adjust.method = "none")
+```
+
+
+```{r}
+aov_baseline_ptt %>% dplyr::filter(gruppe == "HC")%>%
+        rstatix::wilcox_test(
+         baseline_ptt ~ condition, paired = TRUE,p.adjust.method = "none")
+# No differences
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Get ES and CI
+```{r}
+tresult <- aov_baseline_ptt %>% dplyr::group_by(gruppe)%>%
+        rstatix::t_test(baseline_ptt ~ condition, paired = TRUE, p.adjust.method = "none")
+
+tresult <- as.data.frame(tresult)
+
+tresult_hc <- tresult %>% dplyr::filter(gruppe == "HC")
+tresult_cp <- tresult %>% dplyr::filter(gruppe == "CP")
+
+d_hc <- as.data.frame(MOTE::d.dep.t.diff.t(tresult_hc[1,"statistic"], tresult_hc[1,"n1"], a = 0.05)) %>% mutate(gruppe = "HC")
+d_hc
+
+d_cp <- as.data.frame(MOTE::d.dep.t.diff.t(tresult_cp[1,"statistic"], tresult_cp[1,"n1"], a = 0.05)) %>% mutate(gruppe = "CP")
+d_cp
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
